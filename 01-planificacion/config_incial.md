@@ -1,11 +1,11 @@
 # Configuración inicial — Entorno origen
 
 La configuración inicial del dominio `corp.andesdata.local` se realiza mediante
-tres scripts de PowerShell ubicados en la carpeta `scripts/` del proyecto.
+scripts de PowerShell ubicados en la carpeta `scripts/` del proyecto.
 
 Estos scripts permiten construir progresivamente la estructura base de Active
-Directory, los usuarios y la organización de grupos antes de configurar los
-recursos compartidos y sus permisos.
+Directory, los usuarios, la organización de grupos y la configuración inicial
+del servidor de archivos antes de realizar las pruebas de acceso.
 
 ## Scripts utilizados
 
@@ -14,6 +14,10 @@ recursos compartidos y sus permisos.
 | `create_OUs.ps1` | `scripts/` | Crear la estructura de OUs |
 | `Usuarios.ps1` | `scripts/` | Crear los 90 usuarios y asignarlos a sus grupos Globales |
 | `configurar-grupos-agdlp.ps1` | `scripts/` | Configurar la relación entre grupos Globales y grupos Domain Local |
+| `crear_carpetas.ps1` | `scripts/` | Crear la estructura de carpetas del File Server |
+| `compartir_carpetas_SMB.ps1` | `scripts/` | Crear los recursos compartidos SMB |
+| `permisos_SMB.ps1` | `scripts/` | Configurar los permisos de los recursos compartidos SMB |
+| `permisos_carpetas_NTFS.ps1` | `scripts/` | Configurar los permisos NTFS de las carpetas |
 
 ---
 
@@ -227,13 +231,207 @@ DL-FS-GERENCIA-RW
 
 > **Nota:** Este script configura únicamente la relación entre los grupos
 > Globales y Domain Local. La configuración de permisos **NTFS y SMB** se
-> realiza posteriormente y se documenta de forma independiente.
+> realiza posteriormente.
 
 ---
 
-## 4. Orden de ejecución
+## 4. crear_carpetas.ps1
 
-Los tres scripts se ejecutan en el siguiente orden:
+**Ubicación:** `scripts/crear_carpetas.ps1`
+
+### Función
+
+Este script crea la estructura de directorios que será utilizada por el
+servidor de archivos `FS01`.
+
+La estructura se crea dentro de la unidad `E:` en la carpeta `Shares`.
+
+### Estructura creada
+
+```text
+E:\
+└── Shares
+    ├── TI
+    ├── RRHH
+    ├── Finanzas
+    ├── Operaciones
+    ├── Comercial
+    ├── Gerencia
+    └── Public
+```
+
+Las carpetas departamentales serán utilizadas posteriormente para configurar
+los recursos compartidos y sus permisos.
+
+La carpeta `Public` se mantiene como un recurso independiente para contenido
+compartido.
+
+### Resultado
+
+Después de ejecutar el script, `FS01` dispone de la estructura física de
+carpetas necesaria para continuar con la configuración del File Server.
+
+> **Nota:** Este script únicamente crea las carpetas. No crea recursos
+> compartidos SMB ni configura permisos NTFS o SMB.
+
+---
+
+## 5. compartir_carpetas_SMB.ps1
+
+**Ubicación:** `scripts/compartir_carpetas_SMB.ps1`
+
+### Función
+
+Este script crea los recursos compartidos **SMB** a partir de las carpetas
+creadas previamente en `E:\Shares`.
+
+Cada carpeta se publica en la red mediante un nombre de recurso compartido.
+
+### Recursos compartidos creados
+
+| Carpeta | Recurso SMB |
+|---|---|
+| `E:\Shares\TI` | `\\FS01\TI` |
+| `E:\Shares\RRHH` | `\\FS01\RRHH` |
+| `E:\Shares\Finanzas` | `\\FS01\Finanzas` |
+| `E:\Shares\Operaciones` | `\\FS01\Operaciones` |
+| `E:\Shares\Comercial` | `\\FS01\Comercial` |
+| `E:\Shares\Gerencia` | `\\FS01\Gerencia` |
+| `E:\Shares\Public` | `\\FS01\Public` |
+
+Por ejemplo:
+
+```text
+E:\Shares\Finanzas
+        ↓
+   Recurso SMB
+        ↓
+\\FS01\Finanzas
+```
+
+### Resultado
+
+Los usuarios y equipos de la red pueden localizar los recursos mediante las
+rutas UNC correspondientes.
+
+> **Nota:** Este script crea los recursos compartidos SMB, pero no establece
+> todavía los permisos específicos de acceso.
+
+---
+
+## 6. permisos_SMB.ps1
+
+**Ubicación:** `scripts/permisos_SMB.ps1`
+
+### Función
+
+Este script configura los permisos de los recursos compartidos SMB
+departamentales.
+
+Para estos recursos se establece `Everyone` con acceso **Full** a nivel SMB.
+
+### Recursos configurados
+
+| Recurso SMB | Cuenta | Permiso SMB |
+|---|---|---|
+| `TI` | `Everyone` | `Full` |
+| `RRHH` | `Everyone` | `Full` |
+| `Finanzas` | `Everyone` | `Full` |
+| `Operaciones` | `Everyone` | `Full` |
+| `Comercial` | `Everyone` | `Full` |
+| `Gerencia` | `Everyone` | `Full` |
+
+La configuración SMB proporciona un nivel amplio de acceso al recurso
+compartido. El control específico por departamento se realiza posteriormente
+mediante los permisos NTFS.
+
+Por ejemplo:
+
+```text
+\\FS01\Finanzas
+        ↓
+SMB: Everyone → Full
+        ↓
+NTFS: DL-FS-FINANZAS-RW → Modify
+```
+
+> **Nota:** El recurso `Public` no se incluye en la configuración de permisos
+> SMB de este script.
+
+---
+
+## 7. permisos_carpetas_NTFS.ps1
+
+**Ubicación:** `scripts/permisos_carpetas_NTFS.ps1`
+
+### Función
+
+Este script configura los permisos **NTFS** de las carpetas departamentales
+del servidor `FS01`.
+
+Los permisos se asignan utilizando los grupos Domain Local definidos
+previamente mediante el modelo AGDLP.
+
+### Permisos configurados
+
+| Carpeta | Grupo Domain Local | Permiso NTFS |
+|---|---|---|
+| `TI` | `DL-FS-TI-RW` | Modify |
+| `RRHH` | `DL-FS-RRHH-RW` | Modify |
+| `Finanzas` | `DL-FS-FINANZAS-RW` | Modify |
+| `Operaciones` | `DL-FS-OPERACIONES-RW` | Modify |
+| `Comercial` | `DL-FS-COMERCIAL-RW` | Modify |
+| `Gerencia` | `DL-FS-GERENCIA-RW` | Modify |
+
+Además, las carpetas mantienen permisos de **Full Control** para:
+
+- `BUILTIN\Administrators`
+- `NT AUTHORITY\SYSTEM`
+
+La herencia de permisos se deshabilita en las carpetas departamentales para
+permitir una configuración explícita de los permisos.
+
+### Ejemplo
+
+Para Finanzas:
+
+```text
+Usuario de Finanzas
+        ↓
+GG-FINANZAS
+        ↓
+DL-FS-FINANZAS-RW
+        ↓
+E:\Shares\Finanzas
+        ↓
+NTFS: Modify
+```
+
+Mientras que un usuario que no pertenezca al grupo correspondiente no recibe
+el permiso NTFS definido para esa carpeta.
+
+### Resultado
+
+La combinación de permisos SMB y NTFS permite mantener un acceso amplio a
+nivel de recurso compartido y aplicar el control específico mediante NTFS.
+
+```text
+Usuario
+   ↓
+Grupo Global
+   ↓
+Grupo Domain Local
+   ↓
+Permiso NTFS
+   ↓
+Carpeta
+```
+
+---
+
+## 8. Orden de ejecución
+
+Los scripts se ejecutan en el siguiente orden:
 
 ```text
 1. create_OUs.ps1
@@ -247,29 +445,85 @@ Los tres scripts se ejecutan en el siguiente orden:
 3. configurar-grupos-agdlp.ps1
         ↓
    Relación Global → Domain Local
+        ↓
+4. crear_carpetas.ps1
+        ↓
+   Estructura de carpetas en FS01
+        ↓
+5. compartir_carpetas_SMB.ps1
+        ↓
+   Recursos compartidos SMB
+        ↓
+6. permisos_SMB.ps1
+        ↓
+   Permisos SMB
+        ↓
+7. permisos_carpetas_NTFS.ps1
+        ↓
+   Permisos NTFS
 ```
 
-Este orden permite construir progresivamente la estructura inicial del dominio:
+Este orden permite construir progresivamente el entorno, comenzando por la
+estructura de Active Directory y finalizando con la configuración de acceso a
+los recursos compartidos.
 
-1. Primero se crean las OUs.
-2. Luego se crean y organizan los usuarios.
-3. Finalmente se establece la relación entre los grupos Globales y Domain Local.
+---
 
-De esta manera, Active Directory queda preparado para la siguiente etapa del
-proyecto: la configuración del servidor de archivos, los recursos compartidos
-y sus permisos.
+## 9. Flujo completo de acceso
 
-### Alcance de esta configuración
+La configuración implementada sigue el siguiente flujo:
+
+```text
+Usuario
+   ↓
+Grupo Global
+   ↓
+Grupo Domain Local
+   ↓
+Recurso compartido SMB
+   ↓
+Permisos NTFS
+   ↓
+Carpeta del departamento
+```
+
+Por ejemplo, para un usuario de Finanzas:
+
+```text
+Usuario de Finanzas
+        ↓
+   GG-FINANZAS
+        ↓
+DL-FS-FINANZAS-RW
+        ↓
+\\FS01\Finanzas
+        ↓
+E:\Shares\Finanzas
+        ↓
+      Modify
+```
+
+De esta manera, la pertenencia de los usuarios se administra mediante grupos
+Globales, mientras que los permisos sobre los recursos se asignan mediante
+grupos Domain Local.
+
+---
+
+## 10. Alcance de la configuración
 
 Esta etapa comprende:
 
 - Creación de la estructura de OUs.
 - Creación de los usuarios del dominio.
 - Organización de usuarios por departamento.
-- Creación y organización de grupos Globales.
-- Configuración de la relación entre grupos Globales y Domain Local mediante
-  AGDLP.
+- Organización de grupos Globales.
+- Configuración de grupos Domain Local.
+- Implementación del modelo AGDLP.
+- Creación de la estructura de carpetas del File Server.
+- Creación de recursos compartidos SMB.
+- Configuración de permisos SMB.
+- Configuración de permisos NTFS.
 
-La configuración de permisos **NTFS y SMB** no forma parte de estos tres
-scripts y se documenta posteriormente como una etapa independiente.
-
+Con esta configuración se deja preparado el entorno de origen para realizar
+las pruebas de autenticación, acceso a recursos compartidos y validación de
+permisos antes de iniciar la migración del dominio.
