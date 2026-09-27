@@ -1,0 +1,7 @@
+﻿New-SmbShare -Name "TI" -Path "E:\Shares\TI"
+New-SmbShare -Name "RRHH" -Path "E:\Shares\RRHH"
+New-SmbShare -Name "Finanzas" -Path "E:\Shares\Finanzas"
+New-SmbShare -Name "Operaciones" -Path "E:\Shares\Operaciones"
+New-SmbShare -Name "Comercial" -Path "E:\Shares\Comercial"
+New-SmbShare -Name "Gerencia" -Path "E:\Shares\Gerencia"
+New-SmbShare -Name "Public" -Path "E:\Shares\Public"
